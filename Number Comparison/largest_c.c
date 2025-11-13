@@ -3,16 +3,11 @@
 void largest(int a, int b, int c);
 int main() {
 
-    int nums[3];  // array to store 3 numbers
-
-    /* Ask for input using a for loop */
-    for (int i = 0; i < 3; i++) {
-        printf("Enter number %d: ", i + 1);
-        scanf("%d", &nums[i]);
-    }
-
-    /* Call the function to find and print the largest number */
-    largest(nums[0], nums[1], nums[2]);
+    int num1, num2, num3;
+    /* Input three numbers from the user */
+    printf("Enter three numbers: ");
+    scanf("%d %d %d", &num1, &num2, &num3);
+    largest(num1, num2, num3);
 
     return 0;
 }

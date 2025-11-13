@@ -6,7 +6,6 @@ print("Please input third number: ")
 num3 = int(input())  # user input
 
 
-
 largest = [num1, num2, num3]  # assume the first number is the largest
 
 for n in largest:

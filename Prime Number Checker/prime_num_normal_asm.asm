@@ -1,97 +1,148 @@
-.section .rodata                         // Read-only data (strings)
-prompt:         .asciz "Please input a number: "
-fmt_in:         .asciz "%d"                  // Format string for scanf
-msg_prime:      .asciz "%d is a prime number\n"
-msg_not_prime:  .asciz "%d is not a prime number\n"
-
-.section .bss                            // Uninitialized data
-.align 4
-num:            .space 4                     // Reserve 4 bytes for the integer input
-
 .text
-.global main                             // Export main to linker
-.extern printf                           // External C library functions
-.extern scanf
-// ------------------------------------------------------------
-// main function
-// ------------------------------------------------------------
+.align 2
+.global main
+.type main, %function
+
 main:
-// Standard function prologue (stack setup)
-stp     x29, x30, [sp, -16]!             // Push frame pointer (x29) and link register (x30)
-mov     x29, sp                          // Set up new frame pointer
-stp     x19, x20, [sp, -16]!             // Save registers x19 and x20 (we will use them)
+    STP     X29, X30, [SP, #-16]!
+    MOV     X29, SP
 
-// --------------------------------------------------------
-// printf("Please input a number: ");
-// --------------------------------------------------------
-ldr     x0, =prompt                      // x0 = address of prompt string (first arg)
-bl      printf                           // Call printf
+    // Allocate space for local variable 'x' on the stack
+    // We'll store 'x' at [SP, #0]
+    SUB     SP, SP, #16             // Ensure stack is 16-byte aligned
 
-// --------------------------------------------------------
-// scanf("%d", &num);
-// --------------------------------------------------------
-ldr     x0, =fmt_in                      // x0 = address of "%d"
-ldr     x1, =num                         // x1 = address of variable num
-bl      scanf                            // Call scanf("%d", &num)
+    // printf("please input a number: ");
+    ADRP    X0, .L_prompt_string_page
+    ADD     X0, X0, :lo12:.L_prompt_string
+    BL      printf
 
-// --------------------------------------------------------
-// Load input number into w20 (for computation)
-// --------------------------------------------------------
-ldr     w20, num                         // w20 = num
+    // scanf("%d", &x);
+    ADRP    X0, .L_format_string_page
+    ADD     X0, X0, :lo12:.L_format_string
+    ADD     X1, SP, #0              // Address of 'x' on stack (SP + 0)
+    BL      scanf
 
-// --------------------------------------------------------
-// if (n < 2) → not prime
-// --------------------------------------------------------
-cmp     w20, #2                          // Compare n with 2
-b.ge    .check_loop                      // If n >= 2, go to check_loop
-b       .print_not_prime                 // Else, print "not prime"
+    // prime_check(x);
+    LDR     W0, [SP, #0]            // Load 'x' from stack into W0 (argument for prime_check)
+    BL      prime_check
 
-// --------------------------------------------------------
-// Prime checking loop setup
-// --------------------------------------------------------
-.check_loop:
-mov     w19, #2                          // w19 = i = 2 (loop counter)
+    // return 0;
+    MOV     W0, #0                  // Set return value to 0
 
-// while (i * i <= n)
-.loop_cond:
-mul     w1, w19, w19                     // w1 = i * i
-cmp     w1, w20                          // Compare ii with n
-b.gt    .print_prime                     // If ii > n, number is prime
+    // Function epilogue
+    ADD     SP, SP, #16             // Deallocate stack space for 'x'
+    LDP     X29, X30, [SP], #16
+    RET
 
-// --------------------------------------------------------
-// Compute remainder = n % i
-// remainder = n - (n / i) * i
-// --------------------------------------------------------
-udiv    w2, w20, w19                     // w2 = quotient = n / i
-msub    w3, w2, w19, w20                 // w3 = n - (q * i) = remainder
+.align 2
+.global prime_check
+.type prime_check, %function
 
-cbz     w3, .print_not_prime             // If remainder == 0 → not prime
+prime_check:
+    // Function entry prologue
+    // Save FP and LR, and callee-saved registers X19, X20
+    STP     X29, X30, [SP, #-16]!
+    STP     X19, X20, [SP, #-16]!   // Save W19, W20 (used for xyz, i)
+    MOV     X29, SP
 
-add     w19, w19, #1                     // i++
-b       .loop_cond                       // Repeat the loop
+    // X0 contains the input 'x'
+    // W19 will be used for 'xyz'
+    // W20 will be used for 'i' in the loop
 
-// --------------------------------------------------------
-// If no divisors found → prime
-// --------------------------------------------------------
-.print_prime:
-ldr     x0, =msg_prime                   // x0 = address of "%d is a prime number\n"
-mov     w1, w20                          // w1 = n (printf second argument)
-bl      printf                           // Call printf(msg_prime, n)
-b       .exit                            // Jump to program exit
+    MOV     W19, #0                 // xyz = 0
 
-// --------------------------------------------------------
-// Print "not prime" if any divisor found
-// --------------------------------------------------------
-.print_not_prime:
-ldr     x0, =msg_not_prime               // x0 = address of "%d is not a prime number\n"
-mov     w1, w20                          // w1 = n
-bl      printf                           // Call printf(msg_not_prime, n)
+    // Condition: if (x <= 1 || (x > 2 && x % 2 == 0))
 
-// --------------------------------------------------------
-// Exit function (restore stack and return)
-// --------------------------------------------------------
-.exit:
-ldp     x19, x20, [sp], 16               // Restore x19, x20
-ldp     x29, x30, [sp], 16               // Restore frame pointer and return address
-mov     w0, #0                           // Return 0 from main
-ret                                      // Return to OS
+    // Check x <= 1
+    CMP     W0, #1
+    BLE     .L_not_prime_print   // If x <= 1, branch to print not prime
+
+    // Check (x > 2 && x % 2 == 0)
+    CMP     W0, #2
+    BLE     .L_check_x_eq_2         // If x <= 2, go to x==2 check
+
+    // Calculate x % 2
+    AND     W1, W0, #1              // W1 = x % 2
+    CMP     W1, #0
+    BNE     .L_check_x_eq_2         // If x % 2 != 0, it's not an even number, proceed to x==2 check
+
+    // If we reach here, x > 2 AND x % 2 == 0, so it's not prime
+    B       .L_not_prime_print
+
+.L_check_x_eq_2:
+    // Condition: else if (x == 2)
+    CMP     W0, #2
+    BNE     .L_start_loop           // If x != 2, branch to start loop
+
+    // If x == 2, print prime
+    ADRP    X0, .L_prime_string_page
+    ADD     X0, X0, :lo12:.L_prime_string
+    MOV     W1, W0                  // Move 'x' to W1 for printf's second argument
+    BL      printf
+    B       .L_function_exit        // Exit function
+
+.L_start_loop:
+    // else block: for (int i = 3; i * i <= x; i += 2)
+    MOV     W20, #3                 // i = 3
+
+.L_loop_condition:
+    // i * i <= x
+    // Use a 64-bit register for the product to avoid overflow if x is large
+    UMULL   X1, W20, W20            // X1 = i * i (unsigned multiply)
+    UXTW    X2, W0                  // Extend W0 (x) to 64-bit for comparison
+    CMP     X1, X2                  // Compare (long long)i*i with (long long)x
+    BGT     .L_end_loop             // If i*i > x, loop ends
+
+    // if (x % i == 0)
+    UDIV    W1, W0, W20             // W1 = x / i (unsigned division)
+    MUL     W1, W1, W20             // W1 = (x / i) * i
+    CMP     W1, W0                  // Compare (x/i)*i with x
+    BNE     .L_loop_increment       // If not equal, not divisible, continue loop
+
+    // if (x % i == 0), then it's not prime
+    MOV     W19, #1                 // xyz = 1
+    B       .L_end_loop             // Break out of loop
+
+.L_loop_increment:
+    ADD     W20, W20, #2            // i += 2
+    B       .L_loop_condition       // Go back to loop condition
+
+.L_end_loop:
+    // After loop, check xyz
+    CMP     W19, #0
+    BEQ     .L_prime_print          // If xyz == 0, print prime
+
+.L_not_prime_print:               // Common branch for printing "not prime"
+    ADRP    X0, .L_not_prime_string_page
+    ADD     X0, X0, :lo12:.L_not_prime_string
+    MOV     W1, W0                  // Move 'x' to W1 for printf's second argument
+    BL      printf
+    B       .L_function_exit
+
+.L_prime_print:
+    ADRP    X0, .L_prime_string_page
+    ADD     X0, X0, :lo12:.L_prime_string
+    MOV     W1, W0                  // Move 'x' to W1 for printf's second argument
+    BL      printf
+
+.L_function_exit:
+    // Function epilogue
+    MOV     SP, X29                 // Restore SP from FP
+    LDP     X19, X20, [SP], #16     // Restore W19, W20
+    LDP     X29, X30, [SP], #16     // Restore FP and LR
+    RET
+
+.data
+.align 3
+.L_prompt_string_page:
+.L_prompt_string:
+    .string "please input a number: "
+.L_format_string_page:
+.L_format_string:
+    .string "%d"
+.L_prime_string_page:
+.L_prime_string:
+    .string "%d is a prime number\n"
+.L_not_prime_string_page:
+.L_not_prime_string:
+    .string "%d is a not prime number\n"
