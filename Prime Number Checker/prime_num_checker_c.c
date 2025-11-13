@@ -13,7 +13,9 @@ int main(){
     /*ask for input*/   
     printf("please input a number: ");
     scanf("%d", &x);
-    
+
+    prime_check(x);
+
     /*output*/
     return 0;
 };

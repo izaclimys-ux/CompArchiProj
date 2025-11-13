@@ -17,6 +17,8 @@ int main(){
     /* Measure execution time of prime_check */
     elapsed_time_us = measure_execution_time(prime_check, x);
 
+    prime_check(x);
+
     /*output*/
     printf("Execution time for prime_check: %lld microseconds\n", elapsed_time_us);
 
